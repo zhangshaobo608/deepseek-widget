@@ -604,19 +604,24 @@ final class KeyListView: BaseView {
         drawText(title, at: NSPoint(x: 12, y: bounds.height - 14),
                  font: .systemFont(ofSize: 10.5, weight: .semibold), color: tSecondary)
 
-        let ps = NSMutableParagraphStyle()
-        ps.lineBreakMode = .byTruncatingTail
-        let nameAttrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 10.5),
-            .foregroundColor: tPrimary,
-            .paragraphStyle: ps
-        ]
+        let nameFont = NSFont.systemFont(ofSize: 10.5)
+        func truncateName(_ s: String, maxW: CGFloat) -> String {
+            let attrs: [NSAttributedString.Key: Any] = [.font: nameFont]
+            if (s as NSString).size(withAttributes: attrs).width <= maxW { return s }
+            var t = s
+            while !t.isEmpty && ((t + "…") as NSString).size(withAttributes: attrs).width > maxW {
+                t.removeLast()
+            }
+            return t + "…"
+        }
 
         var base = bounds.height - 26
         for key in keys {
-            (key.displayName as NSString).draw(in: NSRect(x: 12, y: base - 11, width: 118, height: 13),
-                                               withAttributes: nameAttrs)
-            var info = "\(fmtTokens(key.tokens)) tok"
+            // 左侧名称与右侧内容共用同一基线（base - 1），保证在同一水平线
+            drawText(truncateName(key.displayName, maxW: 118),
+                     at: NSPoint(x: 12, y: base - 1),
+                     font: nameFont, color: tPrimary)
+            var info = "\(fmtTokens(key.tokens)) tokens"
             if let rate = key.hitRate {
                 info = String(format: "命中 %.1f%% · ", rate * 100) + info
             }
