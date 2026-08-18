@@ -27,13 +27,17 @@ open "build/DeepSeek浮窗.app"       # 启动（已在运行会直接显示）
 2. **从 Chrome 读取**：在 Chrome 登录 `platform.deepseek.com` 后，点设置窗口里的「从 Chrome 读取」，自动从本机 Chrome / Edge / Brave 导入。
 3. **环境变量**：`DEEPSEEK_USER_TOKEN=xxx open "build/DeepSeek浮窗.app"`。
 
-获取 token：登录 `platform.deepseek.com` → F12 打开开发者工具 → Console 执行：
+获取 token：登录 `platform.deepseek.com` → F12 打开开发者工具 → Console 执行（`copy()` 会把 token **直接放进剪贴板**，无需手动选中输出）：
 
 ```js
-JSON.parse(localStorage.getItem('userToken')).value
+copy(JSON.parse(localStorage.getItem('userToken')).value)
 ```
 
-复制输出的长串（以 `eyJ` 开头）即可。
+然后直接 Cmd+V 粘贴。想要更省事，可把下面这段**存成浏览器书签**，在 `platform.deepseek.com` 页面上点一下即自动复制：
+
+```
+javascript:(()=>{const v=JSON.parse(localStorage.getItem('userToken')).value;navigator.clipboard.writeText(v).then(()=>alert('token 已复制'))})()
+```
 
 ## 命令行自检（验证数据链路）
 
