@@ -804,10 +804,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startRefresh() {
         refresh()
-        timer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+        restartTimer()
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
             self?.refresh()
         }
-        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+    }
+
+    static let refreshKey = "dsRefreshSec"
+    static let refreshOptions: [(String, Int)] = [("30 秒", 30), ("1 分钟", 60), ("5 分钟", 300)]
+
+    var refreshInterval: TimeInterval {
+        let v = UserDefaults.standard.integer(forKey: Self.refreshKey)
+        return Self.refreshOptions.contains(where: { $0.1 == v }) ? TimeInterval(v) : 60
+    }
+
+    private func restartTimer() {
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: refreshInterval, repeats: true) { [weak self] _ in
             self?.refresh()
         }
     }
@@ -922,6 +935,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         open.target = self
         menu.addItem(open)
 
+        // 刷新频率子菜单
+        let freq = NSMenu()
+        for (label, sec) in Self.refreshOptions {
+            let item = NSMenuItem(title: label, action: #selector(menuSetRefresh(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = sec
+            item.state = Int(refreshInterval) == sec ? .on : .off
+            freq.addItem(item)
+        }
+        let freqItem = NSMenuItem(title: "刷新频率", action: nil, keyEquivalent: "")
+        menu.addItem(freqItem)
+        menu.setSubmenu(freq, for: freqItem)
+
         menu.addItem(.separator())
         let set = NSMenuItem(title: "设置 Token…", action: #selector(menuSettings), keyEquivalent: ",")
         set.target = self
@@ -938,6 +964,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func menuRefresh() { refresh() }
+
+    @objc func menuSetRefresh(_ sender: NSMenuItem) {
+        UserDefaults.standard.set(sender.tag, forKey: Self.refreshKey)
+        restartTimer()
+        refresh()
+    }
 
     @objc func menuTogglePin() {
         window.level = window.level == .floating ? .normal : .floating
