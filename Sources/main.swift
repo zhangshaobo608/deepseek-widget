@@ -578,7 +578,7 @@ final class CardView: BaseView {
 
         // ── 第一行：模型名（左，SF Rounded） + 每百万平均费用（右，圆体等宽数字）
         accentColor.setFill()
-        NSBezierPath(ovalIn: NSRect(x: 14, y: bounds.height - 32, width: 8, height: 8)).fill()
+        NSBezierPath(ovalIn: NSRect(x: 14, y: bounds.height - 27, width: 8, height: 8)).fill()
         drawText(title, at: NSPoint(x: 30, y: bounds.height - 26),
                  font: uiFont(13, .semibold), color: tPrimary)
 
@@ -637,7 +637,7 @@ final class KeyListView: BaseView {
     var truncated = false
 
     static func height(for count: Int) -> CGFloat {
-        count > 0 ? 24 + CGFloat(count) * 21 : 0
+        count > 0 ? 30 + CGFloat(count) * 21 : 0
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -664,7 +664,7 @@ final class KeyListView: BaseView {
             return t + "…"
         }
 
-        var base = bounds.height - 29
+        var base = bounds.height - 34
         for (i, key) in keys.enumerated() {
             if i > 0 {
                 hairline(at: base + 12, inset: 14, width: bounds.width)
