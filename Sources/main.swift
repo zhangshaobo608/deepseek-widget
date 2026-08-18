@@ -916,8 +916,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildWindow()
+        setupStatusItem()
         window.orderFrontRegardless()
         startRefresh()
+    }
+
+    // MARK: - 菜单栏图标
+
+    private var statusItem: NSStatusItem?
+
+    private func setupStatusItem() {
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        guard let button = statusItem?.button else { return }
+        if let path = Bundle.main.path(forResource: "whale-template", ofType: "png"),
+           let img = NSImage(contentsOfFile: path) {
+            img.isTemplate = true
+            img.size = NSSize(width: 18, height: 18)
+            button.image = img
+        }
+        button.toolTip = "DeepSeek 用量浮窗"
+        button.target = self
+        button.action = #selector(statusClick(_:))
+        button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+    }
+
+    @objc private func statusClick(_ sender: NSStatusBarButton) {
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            let menu = buildMenu()
+            statusItem?.menu = menu
+            statusItem?.button?.performClick(nil)
+            statusItem?.menu = nil
+        } else {
+            toggleWindow()
+        }
+    }
+
+    private func toggleWindow() {
+        if window.isVisible {
+            window.orderOut(nil)
+        } else {
+            window.orderFrontRegardless()
+        }
     }
 
     private func buildWindow() {
@@ -1105,7 +1144,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.setFrame(NSRect(x: topLeft.x, y: topLeft.y - h, width: Self.windowWidth, height: h), display: true)
     }
 
-    private func showMenu(_ event: NSEvent) {
+    private func buildMenu() -> NSMenu {
         let menu = NSMenu()
         let refresh = NSMenuItem(title: "立即刷新", action: #selector(menuRefresh), keyEquivalent: "r")
         refresh.target = self
@@ -1149,8 +1188,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let quit = NSMenuItem(title: "退出", action: #selector(menuQuit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
+        return menu
+    }
 
-        NSMenu.popUpContextMenu(menu, with: event, for: rootView)
+    private func showMenu(_ event: NSEvent) {
+        NSMenu.popUpContextMenu(buildMenu(), with: event, for: rootView)
     }
 
     @objc func menuRefresh() { refresh() }

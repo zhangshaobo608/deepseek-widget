@@ -23,6 +23,7 @@ mkdir -p "$BUILD/$APP_NAME.app/Contents/MacOS" "$BUILD/$APP_NAME.app/Contents/Re
 cp "$BUILD/$BIN" "$BUILD/$APP_NAME.app/Contents/MacOS/$BIN"
 cp Info.plist "$BUILD/$APP_NAME.app/Contents/Info.plist"
 [ -f assets/whale.icns ] && cp assets/whale.icns "$BUILD/$APP_NAME.app/Contents/Resources/whale.icns"
+[ -f assets/whale-template.png ] && cp assets/whale-template.png "$BUILD/$APP_NAME.app/Contents/Resources/whale-template.png"
 codesign --force -s - "$BUILD/$APP_NAME.app" 2>/dev/null || true
 
 echo "==> 完成: $PWD/$BUILD/$APP_NAME.app"
