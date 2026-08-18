@@ -372,7 +372,7 @@ func extractToken(from url: URL) -> String? {
     return nil
 }
 
-// 解析 localStorage 键之后跟着的 value（可能是 UTF-16LE JSON 或纯 ASCII JWT）
+// 解析 localStorage 键之后跟着的 value（可能是 UTF-16LE JSON 或纯 ASCII token）
 func parseStoredToken(_ chunk: Data) -> String? {
     func extractFrom(_ str: String) -> String? {
         if let regex = try? NSRegularExpression(pattern: #""value"\s*:\s*"([^"]+)""#) {
@@ -390,7 +390,7 @@ func parseStoredToken(_ chunk: Data) -> String? {
     }
     if let s = String(data: chunk, encoding: .ascii) {
         if let t = extractFrom(s) { candidates.append(t) }
-        // 裸 JWT 兜底
+        // 裸 JWT 兜底，兼容旧版浏览器存储格式
         if let regex = try? NSRegularExpression(pattern: #"eyJ[A-Za-z0-9._\-]{20,}\.[A-Za-z0-9._\-]{20,}\.[A-Za-z0-9._\-]{10,}"#) {
             let ns = s as NSString
             if let m = regex.firstMatch(in: s, range: NSRange(location: 0, length: ns.length)) {
@@ -398,8 +398,9 @@ func parseStoredToken(_ chunk: Data) -> String? {
             }
         }
     }
-    for t in candidates where t.count >= 20
-        && t.range(of: #"^[A-Za-z0-9._\-]+$"#, options: .regularExpression) != nil {
+    // Bearer token 不要求是 JWT；接受 RFC 6750 b64token 常用字符集。
+    for t in candidates where t.count >= 16
+        && t.range(of: #"^[A-Za-z0-9._~+/=\-]+$"#, options: .regularExpression) != nil {
         return t
     }
     return nil
@@ -754,16 +755,41 @@ final class FooterView: BaseView {
 
 // MARK: - 设置窗口
 
+/// LSUIElement 应用没有标准“编辑”菜单，窗口需自行把常用快捷键送入文本编辑器。
+final class ShortcutWindow: NSWindow {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard flags.contains(.command),
+              !flags.contains(.control), !flags.contains(.option),
+              let key = event.charactersIgnoringModifiers?.lowercased() else {
+            return super.performKeyEquivalent(with: event)
+        }
+
+        let action: Selector?
+        switch key {
+        case "v" where !flags.contains(.shift): action = #selector(NSText.paste(_:))
+        case "c" where !flags.contains(.shift): action = #selector(NSText.copy(_:))
+        case "x" where !flags.contains(.shift): action = #selector(NSText.cut(_:))
+        case "a" where !flags.contains(.shift): action = #selector(NSText.selectAll(_:))
+        case "z" where flags.contains(.shift): action = Selector(("redo:"))
+        case "z": action = Selector(("undo:"))
+        default: action = nil
+        }
+        if let action, NSApp.sendAction(action, to: nil, from: self) { return true }
+        return super.performKeyEquivalent(with: event)
+    }
+}
+
 final class SettingsController: NSObject, NSWindowDelegate {
-    let window: NSWindow
+    let window: ShortcutWindow
     private let tokenField = NSSecureTextField()
     private let statusLabel = NSTextField(labelWithString: "")
     var onChanged: (() -> Void)?
     private let tokenKey = "dsUserToken"
 
     override init() {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 470, height: 316),
-                          styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window = ShortcutWindow(contentRect: NSRect(x: 0, y: 0, width: 470, height: 316),
+                                styleMask: [.titled, .closable], backing: .buffered, defer: false)
         super.init()
         window.title = "DeepSeek 浮窗 · 设置"
         window.delegate = self
@@ -778,8 +804,8 @@ final class SettingsController: NSObject, NSWindowDelegate {
         let instructions = """
         获取方式（任选其一）：
         1. 在 Chrome 登录 platform.deepseek.com → 按 F12 打开开发者工具 → Console 粘贴执行：
-           JSON.parse(localStorage.getItem('userToken')).value
-           复制输出（以 eyJ 开头的长串）粘贴到下方。
+           copy(JSON.parse(localStorage.getItem('userToken')).value)
+           命令会把完整 userToken 复制到剪贴板，再在下方按 ⌘V 粘贴。
         2. 点击下方“从 Chrome 读取”，自动从本机 Chrome / Edge / Brave 导入（免登录复制）。
         """
         let instr = NSTextField(wrappingLabelWithString: instructions)
@@ -788,7 +814,7 @@ final class SettingsController: NSObject, NSWindowDelegate {
         instr.frame = NSRect(x: 20, y: 148, width: 430, height: 116)
         content.addSubview(instr)
 
-        tokenField.placeholderString = "粘贴 userToken（以 eyJ 开头）"
+        tokenField.placeholderString = "粘贴完整 userToken"
         tokenField.frame = NSRect(x: 20, y: 112, width: 430, height: 24)
         tokenField.stringValue = UserDefaults.standard.string(forKey: tokenKey) ?? ""
         content.addSubview(tokenField)
@@ -832,6 +858,7 @@ final class SettingsController: NSObject, NSWindowDelegate {
         }
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+        window.makeFirstResponder(tokenField)
     }
 
     @objc func close() { window.orderOut(nil) }
@@ -1250,7 +1277,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func menuAbout() {
         let alert = NSAlert()
-        alert.messageText = "DeepSeek 浮窗 v2.0.0"
+        alert.messageText = "DeepSeek 浮窗 v2.0.1"
         alert.informativeText = """
         展示当天 V4-Flash / V4-Pro 每百万 token 平均费用与缓存命中率。
         数据来源：platform.deepseek.com 平台用量接口（userToken）。

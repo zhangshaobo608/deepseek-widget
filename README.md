@@ -43,7 +43,7 @@ javascript:(()=>{const v=JSON.parse(localStorage.getItem('userToken')).value;nav
 
 ```bash
 ./build/DeepSeekWidget --selftest                    # 自动读 Chrome / 环境变量里的 token
-./build/DeepSeekWidget --selftest --token eyJ...     # 显式传 token
+./build/DeepSeekWidget --selftest --token '<userToken>'  # 显式传 token
 ```
 
 输出当天 Flash / Pro 的 token 数、缓存命中/未命中、成本、命中率、每百万 token 平均费用等 JSON。
