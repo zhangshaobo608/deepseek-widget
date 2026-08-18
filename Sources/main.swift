@@ -440,6 +440,44 @@ class BaseView: NSView {
     }
 }
 
+/// Apple 风格圆体（SF Rounded），用于标题/标签
+func uiFont(_ size: CGFloat, _ weight: NSFont.Weight) -> NSFont {
+    let base = NSFont.systemFont(ofSize: size, weight: weight)
+    if let desc = base.fontDescriptor.withDesign(.rounded) {
+        return NSFont(descriptor: desc, size: 0) ?? base
+    }
+    return base
+}
+
+/// 圆体 + 等宽数字（数字不跳动，Apple 小组件风格）
+func numFont(_ size: CGFloat, _ weight: NSFont.Weight) -> NSFont {
+    let base = NSFont.systemFont(ofSize: size, weight: weight)
+    let desc = (base.fontDescriptor.withDesign(.rounded) ?? base.fontDescriptor)
+        .addingAttributes([
+            .featureSettings: [
+                [NSFontDescriptor.FeatureKey.typeIdentifier: 6,      // kNumberSpacingType
+                 NSFontDescriptor.FeatureKey.selectorIdentifier: 0]   // kMonospacedNumbersSelector
+            ]
+        ])
+    return NSFont(descriptor: desc, size: 0) ?? base
+}
+
+/// 窗口根视图：毛玻璃质感的深色渐变底
+final class RootView: BaseView {
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        let path = NSBezierPath(roundedRect: bounds, xRadius: 18, yRadius: 18)
+        if let grad = NSGradient(colors: [color(0.115, 0.13, 0.16), color(0.078, 0.088, 0.112)]) {
+            grad.draw(in: path, angle: -90)
+        }
+    }
+}
+
+func hairline(at y: CGFloat, inset: CGFloat, width: CGFloat) {
+    NSColor(calibratedWhite: 1.0, alpha: 0.06).setFill()
+    NSBezierPath(rect: NSRect(x: inset, y: y, width: width - inset * 2, height: 0.5)).fill()
+}
+
 func drawText(_ str: String, at point: NSPoint, font: NSFont, color: NSColor) {
     (str as NSString).draw(at: point, withAttributes: [.font: font, .foregroundColor: color])
 }
@@ -462,21 +500,29 @@ final class HeaderView: BaseView {
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        drawText("DeepSeek 用量", at: NSPoint(x: 12, y: 20), font: .systemFont(ofSize: 14, weight: .semibold), color: tPrimary)
+        // 标题（SF Rounded 半粗）
+        let titleAttrs: [NSAttributedString.Key: Any] = [.font: uiFont(15, .semibold), .foregroundColor: tPrimary]
+        (("DeepSeek 用量" as NSString)).draw(at: NSPoint(x: 16, y: 26), withAttributes: titleAttrs)
+        let titleW = ("DeepSeek 用量" as NSString).size(withAttributes: titleAttrs).width
+
+        // 峰时/闲时胶囊徽标
         let peak = isBeijingPeak()
         let tag = peak ? "峰时" : "闲时"
         let tagColor = peak ? cPeak : cOff
-        let sub = "今日 · \(tag)"
-        let titleAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 14, weight: .semibold)]
-        let titleW = ("DeepSeek 用量" as NSString).size(withAttributes: titleAttrs).width
-        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: tagColor]
-        (sub as NSString).draw(at: NSPoint(x: 12 + titleW + 8, y: 22), withAttributes: attrs)
+        let tagFont = uiFont(10, .medium)
+        let tagAttrs: [NSAttributedString.Key: Any] = [.font: tagFont, .foregroundColor: tagColor]
+        let tagSize = (tag as NSString).size(withAttributes: tagAttrs)
+        let pillW = tagSize.width + 14
+        let pill = NSBezierPath(roundedRect: NSRect(x: 16 + titleW + 10, y: 24, width: pillW, height: 17), xRadius: 8.5, yRadius: 8.5)
+        tagColor.withAlphaComponent(0.14).setFill()
+        pill.fill()
+        (tag as NSString).draw(at: NSPoint(x: 16 + titleW + 10 + 7, y: 27.5), withAttributes: tagAttrs)
 
         // 右侧：更新时间和状态点
         if let updatedAt {
             let f = DateFormatter()
             f.dateFormat = "HH:mm:ss"
-            drawRight("更新 \(f.string(from: updatedAt))", atY: 20, font: .systemFont(ofSize: 10.5), color: tTertiary, maxX: bounds.width - 24)
+            drawRight("更新 \(f.string(from: updatedAt))", atY: 26, font: .systemFont(ofSize: 9.5), color: tTertiary, maxX: bounds.width - 30)
         }
         let dotColor: NSColor
         switch status {
@@ -486,7 +532,7 @@ final class HeaderView: BaseView {
         case .error: dotColor = cRed
         }
         dotColor.setFill()
-        NSBezierPath(ovalIn: NSRect(x: bounds.width - 19, y: 18, width: 8, height: 8)).fill()
+        NSBezierPath(ovalIn: NSRect(x: bounds.width - 23, y: 21, width: 8, height: 8)).fill()
     }
 }
 
@@ -522,60 +568,64 @@ final class CardView: BaseView {
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        let bg = NSBezierPath(roundedRect: bounds.insetBy(dx: 0, dy: 1), xRadius: 10, yRadius: 10)
-        NSColor(calibratedWhite: 1.0, alpha: 0.06).setFill()
+        // 卡片：细腻填充 + 发丝描边
+        let bg = NSBezierPath(roundedRect: bounds.insetBy(dx: 0, dy: 1), xRadius: 12, yRadius: 12)
+        NSColor(calibratedWhite: 1.0, alpha: 0.045).setFill()
         bg.fill()
+        NSColor(calibratedWhite: 1.0, alpha: 0.07).setStroke()
+        bg.lineWidth = 0.5
+        bg.stroke()
 
-        // ── 第一行：模型名（左） + 每百万平均费用（右）
+        // ── 第一行：模型名（左，SF Rounded） + 每百万平均费用（右，圆体等宽数字）
         accentColor.setFill()
-        NSBezierPath(ovalIn: NSRect(x: 12, y: bounds.height - 30, width: 8, height: 8)).fill()
-        drawText(title, at: NSPoint(x: 26, y: bounds.height - 24),
-                 font: .systemFont(ofSize: 13, weight: .semibold), color: tPrimary)
+        NSBezierPath(ovalIn: NSRect(x: 14, y: bounds.height - 32, width: 8, height: 8)).fill()
+        drawText(title, at: NSPoint(x: 30, y: bounds.height - 26),
+                 font: uiFont(13, .semibold), color: tPrimary)
 
         if let a = agg, let avg = a.avgPer1M {
             let sym = currencySymbol(a.primaryCurrency)
             let big = "\(sym)\(String(format: "%.2f", avg))"
             let suffix = "/1M 平均"
-            let suffixAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10.5), .foregroundColor: tPrimary]
+            let suffixAttrs: [NSAttributedString.Key: Any] = [.font: uiFont(10, .medium), .foregroundColor: tPrimary]
             let suffixSize = (suffix as NSString).size(withAttributes: suffixAttrs)
-            (suffix as NSString).draw(at: NSPoint(x: bounds.width - 12 - suffixSize.width, y: bounds.height - 27), withAttributes: suffixAttrs)
-            let bigAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: 18, weight: .bold), .foregroundColor: tPrimary]
+            (suffix as NSString).draw(at: NSPoint(x: bounds.width - 14 - suffixSize.width, y: bounds.height - 29), withAttributes: suffixAttrs)
+            let bigAttrs: [NSAttributedString.Key: Any] = [.font: numFont(20, .bold), .foregroundColor: tPrimary]
             let bigSize = (big as NSString).size(withAttributes: bigAttrs)
-            (big as NSString).draw(at: NSPoint(x: bounds.width - 12 - suffixSize.width - 6 - bigSize.width, y: bounds.height - 28), withAttributes: bigAttrs)
+            (big as NSString).draw(at: NSPoint(x: bounds.width - 14 - suffixSize.width - 6 - bigSize.width, y: bounds.height - 30), withAttributes: bigAttrs)
         } else {
-            drawRight("—", atY: bounds.height - 28, font: .monospacedDigitSystemFont(ofSize: 18, weight: .bold), color: tTertiary, maxX: bounds.width - 12)
+            drawRight("—", atY: bounds.height - 30, font: numFont(20, .bold), color: tTertiary, maxX: bounds.width - 14)
         }
 
         // ── 第二行：今日消耗（白色半粗体为焦点）+ tokens + 请求
         if let a = agg, a.tokens > 0 {
             let sym = currencySymbol(a.primaryCurrency)
-            let baseY = bounds.height - 46
+            let baseY = bounds.height - 50
             let grayAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10.5), .foregroundColor: tSecondary]
-            let valAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold), .foregroundColor: tPrimary]
+            let valAttrs: [NSAttributedString.Key: Any] = [.font: numFont(12, .semibold), .foregroundColor: tPrimary]
             let label = "今日"
-            (label as NSString).draw(at: NSPoint(x: 12, y: baseY), withAttributes: grayAttrs)
+            (label as NSString).draw(at: NSPoint(x: 14, y: baseY), withAttributes: grayAttrs)
             let labelW = (label as NSString).size(withAttributes: grayAttrs).width
             let val = "\(sym)\(fmtCost(a.primaryCost))"
-            (val as NSString).draw(at: NSPoint(x: 12 + labelW + 6, y: baseY), withAttributes: valAttrs)
+            (val as NSString).draw(at: NSPoint(x: 14 + labelW + 6, y: baseY), withAttributes: valAttrs)
             let valW = (val as NSString).size(withAttributes: valAttrs).width
             let rest = " · \(fmtTokens(a.tokens)) tokens · \(a.req) 请求"
-            (rest as NSString).draw(at: NSPoint(x: 12 + labelW + 6 + valW + 4, y: baseY), withAttributes: grayAttrs)
+            (rest as NSString).draw(at: NSPoint(x: 14 + labelW + 6 + valW + 4, y: baseY), withAttributes: grayAttrs)
         } else {
-            drawText("今日暂无用量", at: NSPoint(x: 12, y: bounds.height - 46), font: .systemFont(ofSize: 10.5), color: tTertiary)
+            drawText("今日暂无用量", at: NSPoint(x: 14, y: bounds.height - 50), font: .systemFont(ofSize: 10.5), color: tTertiary)
         }
 
-        // ── 第三行：命中率文字 + 全宽进度条（独立成行，与上下内容拉开间距）
+        // ── 第三行：命中率文字 + 全宽进度条
         if let a = agg, let rate = a.hitRate {
             let hc = hitColor(rate)
-            drawText(String(format: "命中率 %.1f%%", rate * 100), at: NSPoint(x: 12, y: 22),
-                     font: .monospacedDigitSystemFont(ofSize: 11, weight: .medium), color: hc)
-            let barW = bounds.width - 24
-            let track = NSRect(x: 12, y: 6, width: barW, height: 5)
-            NSColor(calibratedWhite: 1.0, alpha: 0.14).setFill()
-            NSBezierPath(roundedRect: track, xRadius: 2.5, yRadius: 2.5).fill()
-            let fillW = max(6, barW * CGFloat(min(max(rate, 0), 1)))
+            drawText(String(format: "命中率 %.1f%%", rate * 100), at: NSPoint(x: 14, y: 24),
+                     font: numFont(11, .medium), color: hc)
+            let barW = bounds.width - 28
+            let track = NSRect(x: 14, y: 7, width: barW, height: 4)
+            NSColor(calibratedWhite: 1.0, alpha: 0.10).setFill()
+            NSBezierPath(roundedRect: track, xRadius: 2, yRadius: 2).fill()
+            let fillW = max(8, barW * CGFloat(min(max(rate, 0), 1)))
             hc.setFill()
-            NSBezierPath(roundedRect: NSRect(x: 12, y: 6, width: fillW, height: 5), xRadius: 2.5, yRadius: 2.5).fill()
+            NSBezierPath(roundedRect: NSRect(x: 14, y: 7, width: fillW, height: 4), xRadius: 2, yRadius: 2).fill()
         }
     }
 }
@@ -587,7 +637,7 @@ final class KeyListView: BaseView {
     var truncated = false
 
     static func height(for count: Int) -> CGFloat {
-        count > 0 ? 26 + CGFloat(count) * 17 : 0
+        count > 0 ? 24 + CGFloat(count) * 21 : 0
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -595,14 +645,13 @@ final class KeyListView: BaseView {
         guard !keys.isEmpty else { return }
 
         // 顶部分隔线
-        NSColor(calibratedWhite: 1.0, alpha: 0.08).setFill()
-        NSBezierPath(rect: NSRect(x: 12, y: bounds.height - 1, width: bounds.width - 24, height: 1)).fill()
+        hairline(at: bounds.height - 0.5, inset: 14, width: bounds.width)
 
         let title = truncated
             ? "各 Key 用量 · 按成本排序（前 \(keys.count)）"
             : "各 Key 用量 · 按成本排序"
-        drawText(title, at: NSPoint(x: 12, y: bounds.height - 14),
-                 font: .systemFont(ofSize: 10.5, weight: .semibold), color: tSecondary)
+        drawText(title, at: NSPoint(x: 16, y: bounds.height - 15),
+                 font: uiFont(11, .semibold), color: tSecondary)
 
         let nameFont = NSFont.systemFont(ofSize: 10.5)
         func truncateName(_ s: String, maxW: CGFloat) -> String {
@@ -615,11 +664,14 @@ final class KeyListView: BaseView {
             return t + "…"
         }
 
-        var base = bounds.height - 26
-        for key in keys {
+        var base = bounds.height - 29
+        for (i, key) in keys.enumerated() {
+            if i > 0 {
+                hairline(at: base + 12, inset: 14, width: bounds.width)
+            }
             // 左侧名称与右侧内容共用同一基线（base - 1），保证在同一水平线
-            drawText(truncateName(key.displayName, maxW: 118),
-                     at: NSPoint(x: 12, y: base - 1),
+            drawText(truncateName(key.displayName, maxW: 120),
+                     at: NSPoint(x: 16, y: base - 1),
                      font: nameFont, color: tPrimary)
             var info = "\(fmtTokens(key.tokens)) tokens"
             if let rate = key.hitRate {
@@ -627,10 +679,10 @@ final class KeyListView: BaseView {
             }
             let infoAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 9.5), .foregroundColor: tTertiary]
             let infoW = (info as NSString).size(withAttributes: infoAttrs).width
-            drawRight(info, atY: base - 1, font: .systemFont(ofSize: 9.5), color: tTertiary, maxX: bounds.width - 12)
+            drawRight(info, atY: base - 1, font: .systemFont(ofSize: 9.5), color: tTertiary, maxX: bounds.width - 16)
             let costStr = "\(currencySymbol("CNY"))\(fmtCost(key.primaryCost))"
-            drawRight(costStr, atY: base - 2, font: .monospacedDigitSystemFont(ofSize: 11, weight: .semibold), color: tPrimary, maxX: bounds.width - 12 - infoW - 6)
-            base -= 17
+            drawRight(costStr, atY: base - 2, font: numFont(11, .semibold), color: tPrimary, maxX: bounds.width - 16 - infoW - 6)
+            base -= 21
         }
     }
 }
@@ -643,12 +695,13 @@ final class FooterView: BaseView {
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
+        hairline(at: bounds.height - 0.5, inset: 14, width: bounds.width)
         switch status {
         case .noToken:
             drawText("右键 → 设置 Token（可自动从 Chrome 读取）",
-                     at: NSPoint(x: 12, y: 12), font: .systemFont(ofSize: 11), color: tTertiary)
+                     at: NSPoint(x: 16, y: 13), font: .systemFont(ofSize: 11), color: tTertiary)
         case .error(let msg):
-            drawText("⚠ \(msg)", at: NSPoint(x: 12, y: 12), font: .systemFont(ofSize: 11), color: cRed)
+            drawText("⚠ \(msg)", at: NSPoint(x: 16, y: 13), font: .systemFont(ofSize: 11), color: cRed)
         case .loading, .ok:
             var parts: [String] = []
             if let r = report {
@@ -669,9 +722,9 @@ final class FooterView: BaseView {
                 }
             }
             if parts.isEmpty {
-                drawText("正在加载…", at: NSPoint(x: 12, y: 12), font: .systemFont(ofSize: 11), color: tTertiary)
+                drawText("正在加载…", at: NSPoint(x: 16, y: 13), font: .systemFont(ofSize: 11), color: tTertiary)
             } else {
-                drawText(parts.joined(separator: " · "), at: NSPoint(x: 12, y: 12), font: .systemFont(ofSize: 11), color: tSecondary)
+                drawText(parts.joined(separator: " · "), at: NSPoint(x: 16, y: 13), font: .systemFont(ofSize: 11), color: tSecondary)
             }
         }
     }
@@ -856,7 +909,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window = NSPanel(contentRect: NSRect(x: 0, y: 0, width: Self.windowWidth, height: 200),
                          styleMask: [.borderless, .nonactivatingPanel],
                          backing: .buffered, defer: false)
-        rootView = BaseView(frame: NSRect(x: 0, y: 0, width: Self.windowWidth, height: 200))
+        rootView = RootView(frame: NSRect(x: 0, y: 0, width: Self.windowWidth, height: 200))
         super.init()
     }
 
@@ -875,9 +928,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.appearance = NSAppearance(named: .darkAqua)
 
         rootView.wantsLayer = true
-        rootView.layer?.cornerRadius = 16
+        rootView.layer?.cornerRadius = 18
         rootView.layer?.masksToBounds = true
-        rootView.layer?.backgroundColor = NSColor(calibratedRed: 0.086, green: 0.098, blue: 0.125, alpha: 0.97).cgColor
         rootView.layer?.borderWidth = 0.5
         rootView.layer?.borderColor = NSColor(calibratedWhite: 1.0, alpha: 0.10).cgColor
         rootView.onRightClick = { [weak self] event in
@@ -1013,9 +1065,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func relayout() {
         let w = Self.windowWidth
         let cardW = w - 16
-        let headerH: CGFloat = 46
-        let cardH: CGFloat = 92
-        let footerH: CGFloat = 30
+        let headerH: CGFloat = 48
+        let cardH: CGFloat = 96
+        let footerH: CGFloat = 32
         let showOther = (report?.other.tokens ?? 0) > 0
         let n = showOther ? 3 : 2
         let keys = report?.keys ?? []
