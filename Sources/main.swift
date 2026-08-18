@@ -587,7 +587,7 @@ final class CardView: BaseView {
             let sym = currencySymbol(a.primaryCurrency)
             let big = "\(sym)\(String(format: "%.2f", avg))"
             let suffix = "/1M 平均"
-            let suffixAttrs: [NSAttributedString.Key: Any] = [.font: uiFont(10, .medium), .foregroundColor: tPrimary]
+            let suffixAttrs: [NSAttributedString.Key: Any] = [.font: uiFont(13, .medium), .foregroundColor: tPrimary]
             let suffixSize = (suffix as NSString).size(withAttributes: suffixAttrs)
             (suffix as NSString).draw(at: NSPoint(x: bounds.width - 14 - suffixSize.width, y: bounds.height - 29), withAttributes: suffixAttrs)
             let bigAttrs: [NSAttributedString.Key: Any] = [.font: numFont(20, .bold), .foregroundColor: tPrimary]
