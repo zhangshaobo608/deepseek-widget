@@ -8,6 +8,8 @@
 	<string>DeepSeekWidget</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.deepseekwidget.floating</string>
+	<key>CFBundleIconFile</key>
+	<string>whale</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>

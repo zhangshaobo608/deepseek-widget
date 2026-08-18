@@ -19,9 +19,10 @@ TMPDIR="$PWD/$BUILD/tmp" swiftc -swift-version 5 -O \
 
 echo "==> 打包 $APP_NAME.app"
 rm -rf "$BUILD/$APP_NAME.app"
-mkdir -p "$BUILD/$APP_NAME.app/Contents/MacOS"
+mkdir -p "$BUILD/$APP_NAME.app/Contents/MacOS" "$BUILD/$APP_NAME.app/Contents/Resources"
 cp "$BUILD/$BIN" "$BUILD/$APP_NAME.app/Contents/MacOS/$BIN"
 cp Info.plist "$BUILD/$APP_NAME.app/Contents/Info.plist"
+[ -f assets/whale.icns ] && cp assets/whale.icns "$BUILD/$APP_NAME.app/Contents/Resources/whale.icns"
 codesign --force -s - "$BUILD/$APP_NAME.app" 2>/dev/null || true
 
 echo "==> 完成: $PWD/$BUILD/$APP_NAME.app"
