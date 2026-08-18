@@ -552,8 +552,8 @@ final class CardView: BaseView {
 
     var title: String {
         switch kind {
-        case .flash: return "DeepSeek-V4-Flash"
-        case .pro: return "DeepSeek-V4-Pro"
+        case .flash: return "V4 Flash"
+        case .pro: return "V4 Pro"
         case .other: return "其他模型"
         }
     }
@@ -569,10 +569,10 @@ final class CardView: BaseView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         // 卡片：细腻填充 + 发丝描边
-        let bg = NSBezierPath(roundedRect: bounds.insetBy(dx: 0, dy: 1), xRadius: 12, yRadius: 12)
-        NSColor(calibratedWhite: 1.0, alpha: 0.045).setFill()
+        let bg = NSBezierPath(roundedRect: bounds.insetBy(dx: 0, dy: 1), xRadius: 10, yRadius: 10)
+        NSColor(calibratedWhite: 1.0, alpha: 0.055).setFill()
         bg.fill()
-        NSColor(calibratedWhite: 1.0, alpha: 0.07).setStroke()
+        NSColor(calibratedWhite: 1.0, alpha: 0.08).setStroke()
         bg.lineWidth = 0.5
         bg.stroke()
 
@@ -586,10 +586,10 @@ final class CardView: BaseView {
         if let a = agg, let avg = a.avgPer1M {
             let sym = currencySymbol(a.primaryCurrency)
             let big = "\(sym)\(String(format: "%.2f", avg))"
-            let suffix = "/1M 平均"
-            let suffixAttrs: [NSAttributedString.Key: Any] = [.font: uiFont(13, .medium), .foregroundColor: tPrimary]
+            let suffix = "/1M 均价"
+            let suffixAttrs: [NSAttributedString.Key: Any] = [.font: uiFont(9.5, .medium), .foregroundColor: tTertiary]
             let suffixSize = (suffix as NSString).size(withAttributes: suffixAttrs)
-            (suffix as NSString).draw(at: NSPoint(x: bounds.width - 14 - suffixSize.width, y: bounds.height - 29), withAttributes: suffixAttrs)
+            (suffix as NSString).draw(at: NSPoint(x: bounds.width - 14 - suffixSize.width, y: bounds.height - 26), withAttributes: suffixAttrs)
             let bigAttrs: [NSAttributedString.Key: Any] = [.font: numFont(20, .bold), .foregroundColor: tPrimary]
             let bigSize = (big as NSString).size(withAttributes: bigAttrs)
             (big as NSString).draw(at: NSPoint(x: bounds.width - 14 - suffixSize.width - 6 - bigSize.width, y: bounds.height - 30), withAttributes: bigAttrs)
@@ -597,36 +597,28 @@ final class CardView: BaseView {
             drawRight("—", atY: bounds.height - 30, font: numFont(20, .bold), color: tTertiary, maxX: bounds.width - 14)
         }
 
-        // ── 第二行：今日消耗（白色半粗体为焦点）+ tokens + 请求
+        // ── 第二层：四个稳定列宽的数据位，避免数据变化时挤压或越界
         if let a = agg, a.tokens > 0 {
             let sym = currencySymbol(a.primaryCurrency)
-            let baseY = bounds.height - 50
-            let grayAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10.5), .foregroundColor: tSecondary]
-            let valAttrs: [NSAttributedString.Key: Any] = [.font: numFont(12, .semibold), .foregroundColor: tPrimary]
-            let label = "今日"
-            (label as NSString).draw(at: NSPoint(x: 14, y: baseY), withAttributes: grayAttrs)
-            let labelW = (label as NSString).size(withAttributes: grayAttrs).width
-            let val = "\(sym)\(fmtCost(a.primaryCost))"
-            (val as NSString).draw(at: NSPoint(x: 14 + labelW + 6, y: baseY), withAttributes: valAttrs)
-            let valW = (val as NSString).size(withAttributes: valAttrs).width
-            let rest = " · \(fmtTokens(a.tokens)) tokens · \(a.req) 请求"
-            (rest as NSString).draw(at: NSPoint(x: 14 + labelW + 6 + valW + 4, y: baseY), withAttributes: grayAttrs)
+            let rate = a.hitRate.map { String(format: "%.1f%%", $0 * 100) } ?? "—"
+            let metrics: [(String, String, NSColor)] = [
+                ("今日成本", "\(sym)\(fmtCost(a.primaryCost))", tPrimary),
+                ("Tokens", fmtTokens(a.tokens), tPrimary),
+                ("请求", "\(a.req)", tPrimary),
+                ("缓存命中", rate, a.hitRate.map(hitColor) ?? tTertiary),
+            ]
+            let contentX: CGFloat = 14
+            let colW = (bounds.width - contentX * 2) / CGFloat(metrics.count)
+            for (i, metric) in metrics.enumerated() {
+                let x = contentX + CGFloat(i) * colW
+                drawText(metric.0, at: NSPoint(x: x, y: 27),
+                         font: .systemFont(ofSize: 9), color: tTertiary)
+                drawText(metric.1, at: NSPoint(x: x, y: 8),
+                         font: numFont(12, .semibold), color: metric.2)
+            }
         } else {
-            drawText("今日暂无用量", at: NSPoint(x: 14, y: bounds.height - 50), font: .systemFont(ofSize: 10.5), color: tTertiary)
-        }
-
-        // ── 第三行：命中率文字 + 全宽进度条
-        if let a = agg, let rate = a.hitRate {
-            let hc = hitColor(rate)
-            drawText(String(format: "命中率 %.1f%%", rate * 100), at: NSPoint(x: 14, y: 24),
-                     font: numFont(11, .medium), color: hc)
-            let barW = bounds.width - 28
-            let track = NSRect(x: 14, y: 7, width: barW, height: 4)
-            NSColor(calibratedWhite: 1.0, alpha: 0.10).setFill()
-            NSBezierPath(roundedRect: track, xRadius: 2, yRadius: 2).fill()
-            let fillW = max(8, barW * CGFloat(min(max(rate, 0), 1)))
-            hc.setFill()
-            NSBezierPath(roundedRect: NSRect(x: 14, y: 7, width: fillW, height: 4), xRadius: 2, yRadius: 2).fill()
+            drawText("今日暂无用量", at: NSPoint(x: 14, y: 16),
+                     font: .systemFont(ofSize: 10.5), color: tTertiary)
         }
     }
 }
@@ -638,7 +630,7 @@ final class KeyListView: BaseView {
     var truncated = false
 
     static func height(for count: Int) -> CGFloat {
-        count > 0 ? 30 + CGFloat(count) * 21 : 0
+        count > 0 ? 38 + CGFloat(count) * 22 : 0
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -648,11 +640,11 @@ final class KeyListView: BaseView {
         // 顶部分隔线
         hairline(at: bounds.height - 0.5, inset: 14, width: bounds.width)
 
-        let title = truncated
-            ? "各 Key 用量 · 按成本排序（前 \(keys.count)）"
-            : "各 Key 用量 · 按成本排序"
-        drawText(title, at: NSPoint(x: 16, y: bounds.height - 15),
+        let title = truncated ? "API Key 用量（前 \(keys.count)）" : "API Key 用量"
+        drawText(title, at: NSPoint(x: 16, y: bounds.height - 16),
                  font: uiFont(11, .semibold), color: tSecondary)
+        drawRight("按成本排序", atY: bounds.height - 16,
+                  font: .systemFont(ofSize: 9), color: tTertiary, maxX: bounds.width - 16)
 
         let nameFont = NSFont.systemFont(ofSize: 10.5)
         func truncateName(_ s: String, maxW: CGFloat) -> String {
@@ -665,18 +657,27 @@ final class KeyListView: BaseView {
             return t + "…"
         }
 
-        // 三列数值右对齐：价格 / 命中率 / tokens（列宽固定，跨行纵向对齐）
+        // 三列数值右对齐，单位只在列头出现一次
         let rightEdge = bounds.width - 16
-        let tokensColW: CGFloat = 68
-        let hitColW: CGFloat = 60
-        let costColW: CGFloat = 46
+        let tokensColW: CGFloat = 56
+        let hitColW: CGFloat = 54
+        let costColW: CGFloat = 48
         let colGap: CGFloat = 10
         let tokensRight = rightEdge
         let hitRight = rightEdge - tokensColW - colGap
         let costRight = rightEdge - tokensColW - colGap - hitColW - colGap
-        let nameMaxW = costRight - costColW - colGap - 16 - 6
+        let nameMaxW = costRight - costColW - colGap - 16 - 4
 
-        var base = bounds.height - 34
+        drawText("Key", at: NSPoint(x: 16, y: bounds.height - 34),
+                 font: .systemFont(ofSize: 9), color: tTertiary)
+        drawRight("成本", atY: bounds.height - 34,
+                  font: .systemFont(ofSize: 9), color: tTertiary, maxX: costRight)
+        drawRight("命中率", atY: bounds.height - 34,
+                  font: .systemFont(ofSize: 9), color: tTertiary, maxX: hitRight)
+        drawRight("Tokens", atY: bounds.height - 34,
+                  font: .systemFont(ofSize: 9), color: tTertiary, maxX: tokensRight)
+
+        var base = bounds.height - 53
         for (i, key) in keys.enumerated() {
             if i > 0 {
                 hairline(at: base + 12, inset: 14, width: bounds.width)
@@ -686,19 +687,19 @@ final class KeyListView: BaseView {
                      at: NSPoint(x: 16, y: base - 1),
                      font: nameFont, color: tPrimary)
             // tokens 列（右对齐）
-            drawRight("\(fmtTokens(key.tokens)) tokens", atY: base - 1,
+            drawRight(fmtTokens(key.tokens), atY: base - 1,
                       font: .systemFont(ofSize: 9.5), color: tTertiary, maxX: tokensRight)
             // 命中率列（右对齐，着色）
             if let rate = key.hitRate {
                 let hc = hitColor(rate)
-                drawRight(String(format: "命中 %.1f%%", rate * 100), atY: base - 1,
+                drawRight(String(format: "%.1f%%", rate * 100), atY: base - 1,
                           font: numFont(9.5, .medium), color: hc, maxX: hitRight)
             }
             // 价格列（右对齐，白色半粗）
             let costStr = "\(currencySymbol("CNY"))\(fmtCost(key.primaryCost))"
             drawRight(costStr, atY: base - 2,
                       font: numFont(11, .semibold), color: tPrimary, maxX: costRight)
-            base -= 21
+            base -= 22
         }
     }
 }
@@ -719,28 +720,33 @@ final class FooterView: BaseView {
         case .error(let msg):
             drawText("⚠ \(msg)", at: NSPoint(x: 16, y: 13), font: .systemFont(ofSize: 11), color: cRed)
         case .loading, .ok:
-            var parts: [String] = []
             if let r = report {
                 let cur = r.flash.primaryCurrency
                 let totalCost = r.flash.primaryCost + r.pro.primaryCost + r.other.primaryCost
-                if totalCost > 0 {
-                    parts.append("今日总成本 \(currencySymbol(cur))\(fmtCost(totalCost))")
-                } else {
-                    parts.append("今日总成本 ¥0.00")
-                }
+                let cost = totalCost > 0
+                    ? "\(currencySymbol(cur))\(fmtCost(totalCost))"
+                    : "¥0.00"
                 let allHit = r.flash.hit + r.pro.hit + r.other.hit
                 let allMiss = r.flash.miss + r.pro.miss + r.other.miss
-                if allHit + allMiss > 0 {
-                    parts.append(String(format: "总命中率 %.1f%%", Double(allHit) / Double(allHit + allMiss) * 100))
+                let hit = allHit + allMiss > 0
+                    ? String(format: "%.1f%%", Double(allHit) / Double(allHit + allMiss) * 100)
+                    : "—"
+                let balance = r.balance.map {
+                    String(format: "%@%.2f", currencySymbol(r.balanceCurrency ?? cur), $0)
+                } ?? "—"
+                let columns = [("今日成本", cost), ("总命中", hit), ("余额", balance)]
+                let colW = (bounds.width - 32) / CGFloat(columns.count)
+                for (i, column) in columns.enumerated() {
+                    let x = 16 + CGFloat(i) * colW
+                    let labelFont = NSFont.systemFont(ofSize: 9.5)
+                    let labelAttrs: [NSAttributedString.Key: Any] = [.font: labelFont]
+                    drawText(column.0, at: NSPoint(x: x, y: 13), font: labelFont, color: tTertiary)
+                    let labelW = (column.0 as NSString).size(withAttributes: labelAttrs).width
+                    drawText(column.1, at: NSPoint(x: x + labelW + 5, y: 12),
+                             font: numFont(10.5, .semibold), color: tSecondary)
                 }
-                if let bal = r.balance {
-                    parts.append(String(format: "余额 %@%.2f", currencySymbol(r.balanceCurrency ?? cur), bal))
-                }
-            }
-            if parts.isEmpty {
-                drawText("正在加载…", at: NSPoint(x: 16, y: 13), font: .systemFont(ofSize: 11), color: tTertiary)
             } else {
-                drawText(parts.joined(separator: " · "), at: NSPoint(x: 16, y: 13), font: .systemFont(ofSize: 11), color: tSecondary)
+                drawText("正在加载…", at: NSPoint(x: 16, y: 13), font: .systemFont(ofSize: 11), color: tTertiary)
             }
         }
     }
@@ -1123,8 +1129,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let w = Self.windowWidth
         let cardW = w - 16
         let headerH: CGFloat = 48
-        let cardH: CGFloat = 96
-        let footerH: CGFloat = 32
+        let cardH: CGFloat = 82
+        let footerH: CGFloat = 36
         let showOther = (report?.other.tokens ?? 0) > 0
         let n = showOther ? 3 : 2
         let keys = report?.keys ?? []
@@ -1261,11 +1267,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // 离屏渲染自检：注入样例数据并导出 PNG
     func injectSample() {
         var r = DayReport()
-        r.flash.add(hit: 12_000_000, miss: 3_000_000, out: 2_000_000, req: 340)
-        r.flash.addCost(123.45, currency: "CNY")
-        r.pro.add(hit: 5_000_000, miss: 20_000_000, out: 6_000_000, req: 120)
-        r.pro.addCost(950.00, currency: "CNY")
-        r.balance = 88.50
+        r.flash.add(hit: 40_000_000, miss: 609_137, out: 8_170_863, req: 195)
+        r.flash.addCost(9.79, currency: "CNY")
+        r.pro.add(hit: 60_000_000, miss: 301_508, out: 14_958_492, req: 233)
+        r.pro.addCost(30.24, currency: "CNY")
+
+        var webKey = KeyAgg(id: "sample-web", name: "张小博-web UI")
+        webKey.hit = 100_000_000
+        webKey.miss = 604_000
+        webKey.out = 20_716_000
+        webKey.cost["CNY"] = 37.20
+        var mobileKey = KeyAgg(id: "sample-mobile", name: "王越")
+        mobileKey.hit = 1_500_000
+        mobileKey.miss = 228_111
+        mobileKey.out = 531_889
+        mobileKey.cost["CNY"] = 2.30
+        var claudeKey = KeyAgg(id: "sample-claude", name: "张小博-Claude")
+        claudeKey.hit = 300_000
+        claudeKey.miss = 30_000
+        claudeKey.out = 118_200
+        claudeKey.cost["CNY"] = 0.53
+        r.keys = [webKey, mobileKey, claudeKey]
+
+        r.balance = 276.02
         r.balanceCurrency = "CNY"
         report = r
         status = .ok
