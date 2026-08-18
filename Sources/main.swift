@@ -423,7 +423,7 @@ let cOff = color(0.35, 0.80, 0.85)
 // 显式文本色（不依赖系统外观解析，保证始终清晰）
 let tPrimary = NSColor(calibratedWhite: 1.0, alpha: 1.0)
 let tSecondary = NSColor(calibratedWhite: 0.78, alpha: 1.0)
-let tTertiary = NSColor(calibratedWhite: 0.56, alpha: 1.0)
+let tTertiary = NSColor(calibratedWhite: 0.62, alpha: 1.0)
 
 func hitColor(_ rate: Double) -> NSColor {
     if rate >= 0.8 { return cGreen }
@@ -734,7 +734,7 @@ final class FooterView: BaseView {
                 let balance = r.balance.map {
                     String(format: "%@%.2f", currencySymbol(r.balanceCurrency ?? cur), $0)
                 } ?? "—"
-                let columns = [("今日成本", cost), ("总命中", hit), ("余额", balance)]
+                let columns = [("总成本", cost), ("总命中", hit), ("余额", balance)]
                 let colW = (bounds.width - 32) / CGFloat(columns.count)
                 for (i, column) in columns.enumerated() {
                     let x = 16 + CGFloat(i) * colW
@@ -1129,6 +1129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let w = Self.windowWidth
         let cardW = w - 16
         let headerH: CGFloat = 48
+        let headerGap: CGFloat = 4
         let cardH: CGFloat = 82
         let footerH: CGFloat = 36
         let showOther = (report?.other.tokens ?? 0) > 0
@@ -1136,12 +1137,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let keys = report?.keys ?? []
         let showKeySection = showKeys && !keys.isEmpty
         let keyH = showKeySection ? KeyListView.height(for: keys.count) : 0
-        let needed = headerH + 10 + cardH * CGFloat(n) + 8 * CGFloat(n - 1)
+        let needed = headerH + headerGap + cardH * CGFloat(n) + 8 * CGFloat(n - 1)
             + 10 + keyH + (keyH > 0 ? 8 : 0) + footerH
         if abs(window.frame.height - needed) > 0.5 {
             resizeWindow(toHeight: needed)
         }
-        var y = needed - headerH - 10
+        var y = needed - headerH - headerGap
         flashCard.frame = NSRect(x: 8, y: y - cardH, width: cardW, height: cardH)
         y -= cardH + 8
         proCard.frame = NSRect(x: 8, y: y - cardH, width: cardW, height: cardH)
@@ -1249,7 +1250,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func menuAbout() {
         let alert = NSAlert()
-        alert.messageText = "DeepSeek 浮窗 v1.0"
+        alert.messageText = "DeepSeek 浮窗 v2.0.0"
         alert.informativeText = """
         展示当天 V4-Flash / V4-Pro 每百万 token 平均费用与缓存命中率。
         数据来源：platform.deepseek.com 平台用量接口（userToken）。
@@ -1282,12 +1283,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mobileKey.miss = 228_111
         mobileKey.out = 531_889
         mobileKey.cost["CNY"] = 2.30
+        var consoleKey = KeyAgg(id: "sample-console", name: "汤曼")
+        consoleKey.hit = 1_500_000
+        consoleKey.miss = 54_404
+        consoleKey.out = 215_596
+        consoleKey.cost["CNY"] = 0.56
         var claudeKey = KeyAgg(id: "sample-claude", name: "张小博-Claude")
         claudeKey.hit = 300_000
         claudeKey.miss = 30_000
         claudeKey.out = 118_200
         claudeKey.cost["CNY"] = 0.53
-        r.keys = [webKey, mobileKey, claudeKey]
+        r.keys = [webKey, mobileKey, consoleKey, claudeKey]
 
         r.balance = 276.02
         r.balanceCurrency = "CNY"
