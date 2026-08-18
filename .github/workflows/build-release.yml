@@ -22,14 +22,14 @@ jobs:
       - name: Package zip
         run: |
           cd build
-          zip -rq "DeepSeek浮窗.app.zip" "DeepSeek浮窗.app"
-          ls -lh "DeepSeek浮窗.app.zip"
+          zip -rq "DeepSeekWidget-macOS.zip" "DeepSeek浮窗.app"
+          ls -lh "DeepSeekWidget-macOS.zip"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v5
         with:
           name: DeepSeekWidget-macOS
-          path: build/DeepSeek浮窗.app.zip
+          path: build/DeepSeekWidget-macOS.zip
           retention-days: 14
 
       - name: Publish GitHub Release
@@ -41,4 +41,4 @@ jobs:
             macOS 悬浮窗：实时展示当天 V4-Flash / V4-Pro 每百万 token 平均费用与缓存命中率。
 
             下载后如果系统提示"无法验证开发者"，右键打开（或执行 `xattr -d com.apple.quarantine`）。
-          files: build/DeepSeek浮窗.app.zip
+          files: build/DeepSeekWidget-macOS.zip
