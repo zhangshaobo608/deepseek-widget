@@ -409,21 +409,21 @@ final class HeaderView: BaseView {
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        drawText("DeepSeek 用量", at: NSPoint(x: 12, y: 20), font: .systemFont(ofSize: 13, weight: .semibold), color: tPrimary)
+        drawText("DeepSeek 用量", at: NSPoint(x: 12, y: 20), font: .systemFont(ofSize: 14, weight: .semibold), color: tPrimary)
         let peak = isBeijingPeak()
         let tag = peak ? "峰时" : "闲时"
         let tagColor = peak ? cPeak : cOff
         let sub = "今日 · \(tag)"
-        let titleAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13, weight: .semibold)]
+        let titleAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 14, weight: .semibold)]
         let titleW = ("DeepSeek 用量" as NSString).size(withAttributes: titleAttrs).width
-        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10), .foregroundColor: tagColor]
+        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: tagColor]
         (sub as NSString).draw(at: NSPoint(x: 12 + titleW + 8, y: 22), withAttributes: attrs)
 
         // 右侧：更新时间和状态点
         if let updatedAt {
             let f = DateFormatter()
             f.dateFormat = "HH:mm:ss"
-            drawRight("更新 \(f.string(from: updatedAt))", atY: 20, font: .systemFont(ofSize: 9.5), color: tTertiary, maxX: bounds.width - 24)
+            drawRight("更新 \(f.string(from: updatedAt))", atY: 20, font: .systemFont(ofSize: 10.5), color: tTertiary, maxX: bounds.width - 24)
         }
         let dotColor: NSColor
         switch status {
@@ -433,7 +433,7 @@ final class HeaderView: BaseView {
         case .error: dotColor = cRed
         }
         dotColor.setFill()
-        NSBezierPath(ovalIn: NSRect(x: bounds.width - 17, y: 19, width: 7, height: 7)).fill()
+        NSBezierPath(ovalIn: NSRect(x: bounds.width - 19, y: 18, width: 8, height: 8)).fill()
     }
 }
 
@@ -477,28 +477,28 @@ final class CardView: BaseView {
         accentColor.setFill()
         NSBezierPath(ovalIn: NSRect(x: 12, y: bounds.height - 30, width: 8, height: 8)).fill()
         drawText(title, at: NSPoint(x: 26, y: bounds.height - 24),
-                 font: .systemFont(ofSize: 12, weight: .semibold), color: tPrimary)
+                 font: .systemFont(ofSize: 13, weight: .semibold), color: tPrimary)
 
         if let a = agg, let avg = a.avgPer1M {
             let sym = currencySymbol(a.primaryCurrency)
             let big = "\(sym)\(String(format: "%.2f", avg))"
             let suffix = "/1M 平均"
-            let suffixAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 9.5), .foregroundColor: tPrimary]
+            let suffixAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10.5), .foregroundColor: tPrimary]
             let suffixSize = (suffix as NSString).size(withAttributes: suffixAttrs)
             (suffix as NSString).draw(at: NSPoint(x: bounds.width - 12 - suffixSize.width, y: bounds.height - 27), withAttributes: suffixAttrs)
-            let bigAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: 16, weight: .bold), .foregroundColor: tPrimary]
+            let bigAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: 18, weight: .bold), .foregroundColor: tPrimary]
             let bigSize = (big as NSString).size(withAttributes: bigAttrs)
             (big as NSString).draw(at: NSPoint(x: bounds.width - 12 - suffixSize.width - 6 - bigSize.width, y: bounds.height - 28), withAttributes: bigAttrs)
         } else {
-            drawRight("—", atY: bounds.height - 28, font: .monospacedDigitSystemFont(ofSize: 16, weight: .bold), color: tTertiary, maxX: bounds.width - 12)
+            drawRight("—", atY: bounds.height - 28, font: .monospacedDigitSystemFont(ofSize: 18, weight: .bold), color: tTertiary, maxX: bounds.width - 12)
         }
 
         // ── 第二行：今日消耗（白色半粗体为焦点）+ tokens + 请求
         if let a = agg, a.tokens > 0 {
             let sym = currencySymbol(a.primaryCurrency)
             let baseY = bounds.height - 46
-            let grayAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10), .foregroundColor: tSecondary]
-            let valAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold), .foregroundColor: tPrimary]
+            let grayAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10.5), .foregroundColor: tSecondary]
+            let valAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold), .foregroundColor: tPrimary]
             let label = "今日"
             (label as NSString).draw(at: NSPoint(x: 12, y: baseY), withAttributes: grayAttrs)
             let labelW = (label as NSString).size(withAttributes: grayAttrs).width
@@ -508,14 +508,14 @@ final class CardView: BaseView {
             let rest = " · \(fmtTokens(a.tokens)) tokens · \(a.req) 请求"
             (rest as NSString).draw(at: NSPoint(x: 12 + labelW + 6 + valW + 4, y: baseY), withAttributes: grayAttrs)
         } else {
-            drawText("今日暂无用量", at: NSPoint(x: 12, y: bounds.height - 46), font: .systemFont(ofSize: 10), color: tTertiary)
+            drawText("今日暂无用量", at: NSPoint(x: 12, y: bounds.height - 46), font: .systemFont(ofSize: 10.5), color: tTertiary)
         }
 
         // ── 第三行：命中率文字 + 全宽进度条（独立成行，与上下内容拉开间距）
         if let a = agg, let rate = a.hitRate {
             let hc = hitColor(rate)
             drawText(String(format: "命中率 %.1f%%", rate * 100), at: NSPoint(x: 12, y: 22),
-                     font: .monospacedDigitSystemFont(ofSize: 10, weight: .medium), color: hc)
+                     font: .monospacedDigitSystemFont(ofSize: 11, weight: .medium), color: hc)
             let barW = bounds.width - 24
             let track = NSRect(x: 12, y: 6, width: barW, height: 5)
             NSColor(calibratedWhite: 1.0, alpha: 0.14).setFill()
@@ -538,9 +538,9 @@ final class FooterView: BaseView {
         switch status {
         case .noToken:
             drawText("右键 → 设置 Token（可自动从 Chrome 读取）",
-                     at: NSPoint(x: 12, y: 11), font: .systemFont(ofSize: 10), color: tTertiary)
+                     at: NSPoint(x: 12, y: 12), font: .systemFont(ofSize: 11), color: tTertiary)
         case .error(let msg):
-            drawText("⚠ \(msg)", at: NSPoint(x: 12, y: 11), font: .systemFont(ofSize: 10), color: cRed)
+            drawText("⚠ \(msg)", at: NSPoint(x: 12, y: 12), font: .systemFont(ofSize: 11), color: cRed)
         case .loading, .ok:
             var parts: [String] = []
             if let r = report {
@@ -561,9 +561,9 @@ final class FooterView: BaseView {
                 }
             }
             if parts.isEmpty {
-                drawText("正在加载…", at: NSPoint(x: 12, y: 11), font: .systemFont(ofSize: 10), color: tTertiary)
+                drawText("正在加载…", at: NSPoint(x: 12, y: 12), font: .systemFont(ofSize: 11), color: tTertiary)
             } else {
-                drawText(parts.joined(separator: " · "), at: NSPoint(x: 12, y: 11), font: .systemFont(ofSize: 10), color: tSecondary)
+                drawText(parts.joined(separator: " · "), at: NSPoint(x: 12, y: 12), font: .systemFont(ofSize: 11), color: tSecondary)
             }
         }
     }
@@ -718,7 +718,7 @@ final class SettingsController: NSObject, NSWindowDelegate {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static let tokenKey = "dsUserToken"
-    static let windowWidth: CGFloat = 300
+    static let windowWidth: CGFloat = 316
 
     let window: NSPanel
     private let rootView: BaseView
@@ -891,8 +891,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func relayout() {
         let w = Self.windowWidth
         let cardW = w - 16
-        let headerH: CGFloat = 44
-        let cardH: CGFloat = 88
+        let headerH: CGFloat = 46
+        let cardH: CGFloat = 92
         let footerH: CGFloat = 30
         let showOther = (report?.other.tokens ?? 0) > 0
         let n = showOther ? 3 : 2
@@ -1040,10 +1040,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.displayIfNeeded()
         let content = window.contentView!
         let rect = content.bounds
-        guard let rep = content.bitmapImageRepForCachingDisplay(in: rect) else {
-            FileHandle.standardError.write(Data("bitmapImageRepForCachingDisplay failed\n".utf8))
+        // 按窗口实际 backing scale 渲染（Retina 2x），与真实屏幕显示一致
+        let scale = window.backingScaleFactor > 1 ? window.backingScaleFactor : 1
+        guard let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int(rect.width * scale),
+            pixelsHigh: Int(rect.height * scale),
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0) else {
+            FileHandle.standardError.write(Data("bitmap alloc failed\n".utf8))
             exit(3)
         }
+        rep.size = NSSize(width: rect.width, height: rect.height)
         content.cacheDisplay(in: rect, to: rep)
         guard let png = rep.representation(using: .png, properties: [:]) else {
             FileHandle.standardError.write(Data("PNG encode failed\n".utf8))
