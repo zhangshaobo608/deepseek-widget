@@ -73,15 +73,51 @@ struct Agg {
     }
 }
 
+struct KeyAgg {
+    var id: String = ""
+    var name: String = ""
+    var masked: String = ""
+    var hit: Int64 = 0
+    var miss: Int64 = 0
+    var out: Int64 = 0
+    var req: Int64 = 0
+    var cost: [String: Double] = [:]
+
+    var tokens: Int64 { hit + miss + out }
+    var hitRate: Double? { hit + miss > 0 ? Double(hit) / Double(hit + miss) : nil }
+    var primaryCost: Double { cost["CNY"] ?? cost.values.max() ?? 0 }
+    var displayName: String {
+        if !name.isEmpty { return name }
+        if !masked.isEmpty { return masked }
+        return id
+    }
+}
+
 struct DayReport {
     var flash = Agg()
     var pro = Agg()
     var other = Agg()
+    var keys: [KeyAgg] = []
+    var truncatedKeys = false
     var balance: Double?
     var balanceCurrency: String?
 
     static func parse(amount: Any?, cost: Any?, summary: Any?) -> DayReport {
         var r = DayReport()
+        var keyMap: [String: Int] = [:]
+
+        func keyIndex(_ ki: [String: Any]) -> Int {
+            let kid = ki["tracking_id"] as? String ?? ki["name"] as? String ?? ""
+            if let existing = keyMap[kid] { return existing }
+            var ka = KeyAgg()
+            ka.id = kid
+            ka.name = ki["name"] as? String ?? ""
+            ka.masked = ki["sensitive_id"] as? String ?? ""
+            keyMap[kid] = r.keys.count
+            r.keys.append(ka)
+            return r.keys.count - 1
+        }
+
         if let bd = amount as? [String: Any], let series = bd["series"] as? [[String: Any]] {
             for s in series {
                 let k = classify(s["model"] as? String ?? "")
@@ -98,6 +134,11 @@ struct DayReport {
                 case .pro: r.pro.add(hit: hit, miss: miss, out: out, req: req)
                 case .other: r.other.add(hit: hit, miss: miss, out: out, req: req)
                 }
+                let idx = keyIndex(s["api_key"] as? [String: Any] ?? [:])
+                r.keys[idx].hit += hit
+                r.keys[idx].miss += miss
+                r.keys[idx].out += out
+                r.keys[idx].req += req
             }
         }
         if let bd = cost as? [String: Any], let entries = bd["data"] as? [[String: Any]] {
@@ -112,8 +153,20 @@ struct DayReport {
                     case .pro: r.pro.addCost(c, currency: currency)
                     case .other: r.other.addCost(c, currency: currency)
                     }
+                    let idx = keyIndex(s["api_key"] as? [String: Any] ?? [:])
+                    r.keys[idx].cost[currency, default: 0] += c
                 }
             }
+        }
+        // 只保留今天有活动的 key，按成本降序（金额相同按 tokens），最多 10 个
+        r.keys = r.keys.filter { $0.primaryCost > 0 || $0.tokens > 0 }
+        r.keys.sort {
+            if $0.primaryCost != $1.primaryCost { return $0.primaryCost > $1.primaryCost }
+            return $0.tokens > $1.tokens
+        }
+        if r.keys.count > 10 {
+            r.keys = Array(r.keys.prefix(10))
+            r.truncatedKeys = true
         }
         if let bd = summary as? [String: Any] {
             var bal: [String: Double] = [:]
@@ -527,6 +580,56 @@ final class CardView: BaseView {
     }
 }
 
+// MARK: - 各 Key 用量列表
+
+final class KeyListView: BaseView {
+    var keys: [KeyAgg] = []
+    var truncated = false
+
+    static func height(for count: Int) -> CGFloat {
+        count > 0 ? 26 + CGFloat(count) * 17 : 0
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard !keys.isEmpty else { return }
+
+        // 顶部分隔线
+        NSColor(calibratedWhite: 1.0, alpha: 0.08).setFill()
+        NSBezierPath(rect: NSRect(x: 12, y: bounds.height - 1, width: bounds.width - 24, height: 1)).fill()
+
+        let title = truncated
+            ? "各 Key 用量 · 按成本排序（前 \(keys.count)）"
+            : "各 Key 用量 · 按成本排序"
+        drawText(title, at: NSPoint(x: 12, y: bounds.height - 14),
+                 font: .systemFont(ofSize: 10.5, weight: .semibold), color: tSecondary)
+
+        let ps = NSMutableParagraphStyle()
+        ps.lineBreakMode = .byTruncatingTail
+        let nameAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 10.5),
+            .foregroundColor: tPrimary,
+            .paragraphStyle: ps
+        ]
+
+        var base = bounds.height - 26
+        for key in keys {
+            (key.displayName as NSString).draw(in: NSRect(x: 12, y: base - 11, width: 118, height: 13),
+                                               withAttributes: nameAttrs)
+            var info = "\(fmtTokens(key.tokens)) tok"
+            if let rate = key.hitRate {
+                info = String(format: "命中 %.1f%% · ", rate * 100) + info
+            }
+            let infoAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 9.5), .foregroundColor: tTertiary]
+            let infoW = (info as NSString).size(withAttributes: infoAttrs).width
+            drawRight(info, atY: base - 1, font: .systemFont(ofSize: 9.5), color: tTertiary, maxX: bounds.width - 12)
+            let costStr = "\(currencySymbol("CNY"))\(fmtCost(key.primaryCost))"
+            drawRight(costStr, atY: base - 2, font: .monospacedDigitSystemFont(ofSize: 11, weight: .semibold), color: tPrimary, maxX: bounds.width - 12 - infoW - 6)
+            base -= 17
+        }
+    }
+}
+
 // MARK: - 底部视图
 
 final class FooterView: BaseView {
@@ -726,6 +829,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let flashCard = CardView()
     private let proCard = CardView()
     private let otherCard = CardView()
+    private let keyList = KeyListView()
     private let footer = FooterView()
     private var settings: SettingsController?
     private var timer: Timer?
@@ -784,6 +888,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         proCard.onRightClick = { [weak self] e in self?.showMenu(e) }
         otherCard.kind = .other
         otherCard.onRightClick = { [weak self] e in self?.showMenu(e) }
+        keyList.onRightClick = { [weak self] e in self?.showMenu(e) }
         header.onRightClick = { [weak self] e in self?.showMenu(e) }
         footer.onRightClick = { [weak self] e in self?.showMenu(e) }
 
@@ -791,6 +896,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         rootView.addSubview(flashCard)
         rootView.addSubview(proCard)
         rootView.addSubview(otherCard)
+        rootView.addSubview(keyList)
         rootView.addSubview(footer)
 
         positionWindow()
@@ -881,11 +987,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         proCard.needsDisplay = true
         otherCard.needsDisplay = true
 
+        keyList.keys = report?.keys ?? []
+        keyList.truncated = report?.truncatedKeys ?? false
+        keyList.needsDisplay = true
+
         footer.report = report
         footer.status = status
         footer.needsDisplay = true
 
         relayout()
+    }
+
+    static let showKeysKey = "dsShowKeys"
+
+    var showKeys: Bool {
+        if UserDefaults.standard.object(forKey: Self.showKeysKey) == nil { return true }
+        return UserDefaults.standard.bool(forKey: Self.showKeysKey)
     }
 
     private func relayout() {
@@ -896,7 +1013,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let footerH: CGFloat = 30
         let showOther = (report?.other.tokens ?? 0) > 0
         let n = showOther ? 3 : 2
-        let needed = headerH + 10 + cardH * CGFloat(n) + 8 * CGFloat(n - 1) + 10 + footerH
+        let keys = report?.keys ?? []
+        let showKeySection = showKeys && !keys.isEmpty
+        let keyH = showKeySection ? KeyListView.height(for: keys.count) : 0
+        let needed = headerH + 10 + cardH * CGFloat(n) + 8 * CGFloat(n - 1)
+            + 10 + keyH + (keyH > 0 ? 8 : 0) + footerH
         if abs(window.frame.height - needed) > 0.5 {
             resizeWindow(toHeight: needed)
         }
@@ -912,6 +1033,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             otherCard.isHidden = true
         }
         header.frame = NSRect(x: 0, y: needed - headerH, width: w, height: headerH)
+        if showKeySection {
+            keyList.frame = NSRect(x: 0, y: footerH + 8, width: w, height: keyH)
+            keyList.isHidden = false
+        } else {
+            keyList.isHidden = true
+        }
         footer.frame = NSRect(x: 0, y: 0, width: w, height: footerH)
     }
 
@@ -930,6 +1057,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pin.target = self
         pin.state = window.level == .floating ? .on : .off
         menu.addItem(pin)
+
+        let keysItem = NSMenuItem(title: "显示各 Key 用量", action: #selector(menuToggleKeys), keyEquivalent: "")
+        keysItem.target = self
+        keysItem.state = showKeys ? .on : .off
+        menu.addItem(keysItem)
 
         let open = NSMenuItem(title: "打开平台用量页", action: #selector(menuOpenSite), keyEquivalent: "")
         open.target = self
@@ -973,6 +1105,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func menuTogglePin() {
         window.level = window.level == .floating ? .normal : .floating
+    }
+
+    @objc func menuToggleKeys() {
+        UserDefaults.standard.set(!showKeys, forKey: Self.showKeysKey)
+        render()
     }
 
     @objc func menuOpenSite() {
