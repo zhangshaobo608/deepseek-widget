@@ -578,7 +578,8 @@ final class CardView: BaseView {
 
         // ── 第一行：模型名（左，SF Rounded） + 每百万平均费用（右，圆体等宽数字）
         accentColor.setFill()
-        NSBezierPath(ovalIn: NSRect(x: 14, y: bounds.height - 24, width: 8, height: 8)).fill()
+        let dotOffset = CGFloat(UserDefaults.standard.integer(forKey: "dsDotOffset"))
+        NSBezierPath(ovalIn: NSRect(x: 14, y: bounds.height - 24 - dotOffset, width: 8, height: 8)).fill()
         drawText(title, at: NSPoint(x: 30, y: bounds.height - 26),
                  font: uiFont(13, .semibold), color: tPrimary)
 
@@ -1120,6 +1121,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keysItem.state = showKeys ? .on : .off
         menu.addItem(keysItem)
 
+        // 圆点对齐微调子菜单
+        let dotMenu = NSMenu()
+        for (label, offset) in [("居中（默认）", 0), ("上移 2pt", -2), ("下移 2pt", 2)] {
+            let item = NSMenuItem(title: label, action: #selector(menuSetDotOffset(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = offset
+            item.state = UserDefaults.standard.integer(forKey: "dsDotOffset") == offset ? .on : .off
+            dotMenu.addItem(item)
+        }
+        let dotItem = NSMenuItem(title: "圆点对齐", action: nil, keyEquivalent: "")
+        menu.addItem(dotItem)
+        menu.setSubmenu(dotMenu, for: dotItem)
+
         let open = NSMenuItem(title: "打开平台用量页", action: #selector(menuOpenSite), keyEquivalent: "")
         open.target = self
         menu.addItem(open)
@@ -1167,6 +1181,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func menuToggleKeys() {
         UserDefaults.standard.set(!showKeys, forKey: Self.showKeysKey)
         render()
+    }
+
+    @objc func menuSetDotOffset(_ sender: NSMenuItem) {
+        UserDefaults.standard.set(sender.tag, forKey: "dsDotOffset")
+        flashCard.needsDisplay = true
+        proCard.needsDisplay = true
+        otherCard.needsDisplay = true
     }
 
     @objc func menuOpenSite() {
