@@ -665,24 +665,39 @@ final class KeyListView: BaseView {
             return t + "…"
         }
 
+        // 三列数值右对齐：价格 / 命中率 / tokens（列宽固定，跨行纵向对齐）
+        let rightEdge = bounds.width - 16
+        let tokensColW: CGFloat = 68
+        let hitColW: CGFloat = 60
+        let costColW: CGFloat = 46
+        let colGap: CGFloat = 10
+        let tokensRight = rightEdge
+        let hitRight = rightEdge - tokensColW - colGap
+        let costRight = rightEdge - tokensColW - colGap - hitColW - colGap
+        let nameMaxW = costRight - costColW - colGap - 16 - 6
+
         var base = bounds.height - 34
         for (i, key) in keys.enumerated() {
             if i > 0 {
                 hairline(at: base + 12, inset: 14, width: bounds.width)
             }
-            // 左侧名称与右侧内容共用同一基线（base - 1），保证在同一水平线
-            drawText(truncateName(key.displayName, maxW: 120),
+            // 左侧名称
+            drawText(truncateName(key.displayName, maxW: nameMaxW),
                      at: NSPoint(x: 16, y: base - 1),
                      font: nameFont, color: tPrimary)
-            var info = "\(fmtTokens(key.tokens)) tokens"
+            // tokens 列（右对齐）
+            drawRight("\(fmtTokens(key.tokens)) tokens", atY: base - 1,
+                      font: .systemFont(ofSize: 9.5), color: tTertiary, maxX: tokensRight)
+            // 命中率列（右对齐，着色）
             if let rate = key.hitRate {
-                info = String(format: "命中 %.1f%% · ", rate * 100) + info
+                let hc = hitColor(rate)
+                drawRight(String(format: "命中 %.1f%%", rate * 100), atY: base - 1,
+                          font: numFont(9.5, .medium), color: hc, maxX: hitRight)
             }
-            let infoAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 9.5), .foregroundColor: tTertiary]
-            let infoW = (info as NSString).size(withAttributes: infoAttrs).width
-            drawRight(info, atY: base - 1, font: .systemFont(ofSize: 9.5), color: tTertiary, maxX: bounds.width - 16)
+            // 价格列（右对齐，白色半粗）
             let costStr = "\(currencySymbol("CNY"))\(fmtCost(key.primaryCost))"
-            drawRight(costStr, atY: base - 2, font: numFont(11, .semibold), color: tPrimary, maxX: bounds.width - 16 - infoW - 6)
+            drawRight(costStr, atY: base - 2,
+                      font: numFont(11, .semibold), color: tPrimary, maxX: costRight)
             base -= 21
         }
     }
