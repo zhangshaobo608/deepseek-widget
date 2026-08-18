@@ -1,5 +1,7 @@
 # DeepSeek 浮窗（macOS）
 
+[![Build & Release](https://github.com/zhangshaobo608/deepseek-widget/actions/workflows/build-release.yml/badge.svg)](https://github.com/zhangshaobo608/deepseek-widget/actions)
+
 一个原生 Swift/AppKit 桌面悬浮小窗，实时展示你的 DeepSeek 开放平台账号**当天**用量：
 
 - **V4-Flash / V4-Pro**：每 100 万 token 的平均费用（= 当天成本 ÷ 当天 token 数 × 100 万）

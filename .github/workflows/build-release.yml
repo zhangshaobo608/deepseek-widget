@@ -1,0 +1,41 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build .app
+        run: ./build.sh
+
+      - name: Package zip
+        run: |
+          cd build
+          zip -rq "DeepSeek浮窗.app.zip" "DeepSeek浮窗.app"
+          ls -lh "DeepSeek浮窗.app.zip"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeepSeekWidget-macOS
+          path: build/DeepSeek浮窗.app.zip
+          retention-days: 14
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: DeepSeek 浮窗 ${{ github.ref_name }}
+          body: |
+            macOS 悬浮窗：实时展示当天 V4-Flash / V4-Pro 每百万 token 平均费用与缓存命中率。
+
+            下载后如果系统提示"无法验证开发者"，右键打开（或执行 `xattr -d com.apple.quarantine`）。
+          files: build/DeepSeek浮窗.app.zip
