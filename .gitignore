@@ -1,0 +1,9 @@
+# 构建产物
+build/
+
+# macOS
+.DS_Store
+
+# 本地 token 配置（防御性：绝不入库）
+*.token
+token.txt
