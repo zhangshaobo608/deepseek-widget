@@ -895,7 +895,7 @@ final class SettingsController: NSObject, NSWindowDelegate {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static let tokenKey = "dsUserToken"
-    static let windowWidth: CGFloat = 316
+    static let windowWidth: CGFloat = 340
 
     let window: NSPanel
     private let rootView: BaseView
