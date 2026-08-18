@@ -578,7 +578,7 @@ final class CardView: BaseView {
 
         // ── 第一行：模型名（左，SF Rounded） + 每百万平均费用（右，圆体等宽数字）
         accentColor.setFill()
-        NSBezierPath(ovalIn: NSRect(x: 14, y: bounds.height - 27, width: 8, height: 8)).fill()
+        NSBezierPath(ovalIn: NSRect(x: 14, y: bounds.height - 24, width: 8, height: 8)).fill()
         drawText(title, at: NSPoint(x: 30, y: bounds.height - 26),
                  font: uiFont(13, .semibold), color: tPrimary)
 
