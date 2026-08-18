@@ -926,13 +926,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
 
     private func setupStatusItem() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        statusItem = NSStatusBar.system.statusItem(withLength: 24)
         guard let button = statusItem?.button else { return }
         if let path = Bundle.main.path(forResource: "whale-template", ofType: "png"),
            let img = NSImage(contentsOfFile: path) {
             img.isTemplate = true
-            img.size = NSSize(width: 18, height: 18)
+            // 鲸鱼为宽扁形（406x306），按真实宽高比放大到 24pt 宽
+            img.size = NSSize(width: 24, height: 24 * 306.0 / 406.0)
             button.image = img
+            button.imageScaling = .scaleProportionallyUpOrDown
         }
         button.toolTip = "DeepSeek 用量浮窗"
         button.target = self
