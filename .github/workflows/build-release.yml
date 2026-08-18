@@ -11,7 +11,7 @@ jobs:
     runs-on: macos-15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Build .app
         run: ./build.sh
@@ -23,7 +23,7 @@ jobs:
           ls -lh "DeepSeek浮窗.app.zip"
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: DeepSeekWidget-macOS
           path: build/DeepSeek浮窗.app.zip
