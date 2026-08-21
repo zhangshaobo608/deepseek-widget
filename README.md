@@ -4,7 +4,7 @@
 
 一个原生 Swift/AppKit 桌面悬浮小窗，实时展示你的 DeepSeek 开放平台账号**当天**用量：
 
-- **V4-Flash / V4-Pro**：每 100 万 token 的平均费用（= 当天成本 ÷ 当天 token 数 × 100 万）
+- **V4-Flash / V4-Flash-Vision-Exp / V4-Pro**：各模型每 100 万 token 的平均费用（= 当天成本 ÷ 当天 token 数 × 100 万）
 - **缓存命中率**：命中 token ÷（命中 + 未命中）
 - 今日总成本、余额、请求数，以及当前"峰时/闲时"标识（北京时间 9:00–12:00、14:00–18:00 为峰时）
 
@@ -46,7 +46,7 @@ javascript:(()=>{const v=JSON.parse(localStorage.getItem('userToken')).value;nav
 ./build/DeepSeekWidget --selftest --token '<userToken>'  # 显式传 token
 ```
 
-输出当天 Flash / Pro 的 token 数、缓存命中/未命中、成本、命中率、每百万 token 平均费用等 JSON。
+输出当天 Flash / Vision Exp / Pro 的 token 数、缓存命中/未命中、成本、命中率、每百万 token 平均费用等 JSON。
 
 ## 数据与价格说明
 
@@ -62,6 +62,7 @@ javascript:(()=>{const v=JSON.parse(localStorage.getItem('userToken')).value;nav
 | V4-Pro | 闲 | 0.15 | 4.50 | 13.50 |
 
 鼠标悬停在模型卡片上可查看参考价提示；卡片上的平均费用是你账号的真实账单口径，已包含峰谷价差。
+Vision Exp 暂不内置参考价提示，但仍按平台返回的实际成本独立计算并展示账单均价。
 
 ## 文件
 

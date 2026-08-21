@@ -1,4 +1,4 @@
-// DeepSeek 浮窗 —— 展示当天 V4 Flash / Pro 每百万 token 平均费用与缓存命中率
+// DeepSeek 浮窗 —— 展示当天 V4 Flash / Vision Exp / Pro 每百万 token 平均费用与缓存命中率
 // 数据源：platform.deepseek.com 平台内部用量接口（userToken Bearer 鉴权）
 // 构建：./build.sh
 
@@ -40,10 +40,12 @@ func isBeijingPeak(_ date: Date = Date()) -> Bool {
 
 // MARK: - 数据模型
 
-enum ModelKind { case flash, pro, other }
+enum ModelKind { case flash, vision, pro, other }
 
 func classify(_ model: String) -> ModelKind {
     let m = model.lowercased()
+    // Vision 型号也包含 "flash"，必须优先识别，避免并入普通 Flash。
+    if m.contains("vision") { return .vision }
     if m.contains("flash") { return .flash }
     if m.contains("pro") { return .pro }
     return .other
@@ -95,12 +97,16 @@ struct KeyAgg {
 
 struct DayReport {
     var flash = Agg()
+    var vision = Agg()
     var pro = Agg()
     var other = Agg()
     var keys: [KeyAgg] = []
     var truncatedKeys = false
     var balance: Double?
     var balanceCurrency: String?
+
+    var totalTokens: Int64 { flash.tokens + vision.tokens + pro.tokens + other.tokens }
+    var totalCost: Double { flash.primaryCost + vision.primaryCost + pro.primaryCost + other.primaryCost }
 
     static func parse(amount: Any?, cost: Any?, summary: Any?) -> DayReport {
         var r = DayReport()
@@ -131,6 +137,7 @@ struct DayReport {
                 }
                 switch k {
                 case .flash: r.flash.add(hit: hit, miss: miss, out: out, req: req)
+                case .vision: r.vision.add(hit: hit, miss: miss, out: out, req: req)
                 case .pro: r.pro.add(hit: hit, miss: miss, out: out, req: req)
                 case .other: r.other.add(hit: hit, miss: miss, out: out, req: req)
                 }
@@ -150,6 +157,7 @@ struct DayReport {
                     for b in (s["buckets"] as? [[String: Any]]) ?? [] { c += dnum(b["cost"]) }
                     switch k {
                     case .flash: r.flash.addCost(c, currency: currency)
+                    case .vision: r.vision.addCost(c, currency: currency)
                     case .pro: r.pro.addCost(c, currency: currency)
                     case .other: r.other.addCost(c, currency: currency)
                     }
@@ -219,6 +227,11 @@ func fmtCost(_ v: Double) -> String {
 
 enum FetchError: LocalizedError {
     case auth(String), api(String), network(String), parse(String)
+
+    var isRetryable: Bool {
+        if case .auth = self { return false }
+        return true
+    }
 
     var errorDescription: String? {
         switch self {
@@ -301,28 +314,60 @@ final class DeepSeekFetcher {
             "end": "\(endSec + a)",
             "tz": "\(r)",
         ]
-        request("/usage/by_api_key/amount", params) { amt in
-            self.request("/usage/by_api_key/cost", params) { cost in
-                self.request("/users/get_user_summary", [:]) { sum in
-                    var failures: [FetchError] = []
-                    if case .failure(let e) = amt { failures.append(e) }
-                    if case .failure(let e) = cost { failures.append(e) }
-                    if case .failure(let e) = sum { failures.append(e) }
-                    if failures.count == 3 {
-                        let authFirst = failures.first {
-                            if case .auth = $0 { return true }
-                            return false
-                        }
-                        completion(.failure(authFirst ?? failures[0]))
-                        return
-                    }
-                    let report = DayReport.parse(
-                        amount: (try? amt.get()) ?? nil,
-                        cost: (try? cost.get()) ?? nil,
-                        summary: (try? sum.get()) ?? nil)
-                    completion(.success(report))
-                }
+        let group = DispatchGroup()
+        let resultQueue = DispatchQueue(label: "com.deepseekwidget.fetch-results")
+        var amountResult: Result<Any, FetchError>?
+        var costResult: Result<Any, FetchError>?
+        var summaryResult: Result<Any, FetchError>?
+
+        group.enter()
+        request("/usage/by_api_key/amount", params) { result in
+            resultQueue.async {
+                amountResult = result
+                group.leave()
             }
+        }
+        group.enter()
+        request("/usage/by_api_key/cost", params) { result in
+            resultQueue.async {
+                costResult = result
+                group.leave()
+            }
+        }
+        group.enter()
+        request("/users/get_user_summary", [:]) { result in
+            resultQueue.async {
+                summaryResult = result
+                group.leave()
+            }
+        }
+
+        group.notify(queue: resultQueue) {
+            guard let amountResult, let costResult, let summaryResult else {
+                completion(.failure(.parse("请求结果不完整")))
+                return
+            }
+
+            // 用量和费用共同构成卡片数据，任一失败都不能用空值覆盖旧报表。
+            let required = [amountResult, costResult]
+            let failures = required.compactMap { result -> FetchError? in
+                if case .failure(let error) = result { return error }
+                return nil
+            }
+            if !failures.isEmpty {
+                let authFirst = failures.first {
+                    if case .auth = $0 { return true }
+                    return false
+                }
+                completion(.failure(authFirst ?? failures[0]))
+                return
+            }
+
+            let report = DayReport.parse(
+                amount: try? amountResult.get(),
+                cost: try? costResult.get(),
+                summary: try? summaryResult.get())
+            completion(.success(report))
         }
     }
 }
@@ -413,6 +458,7 @@ func color(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat, _ a: CGFloat = 1) -> NSColo
 }
 
 let cFlash = color(0.30, 0.82, 0.87)
+let cVision = color(1.00, 0.64, 0.24)
 let cPro = color(0.72, 0.53, 1.00)
 let cOther = color(0.62, 0.68, 0.75)
 let cGreen = color(0.24, 0.78, 0.40)
@@ -546,6 +592,7 @@ final class CardView: BaseView {
     var accentColor: NSColor {
         switch kind {
         case .flash: return cFlash
+        case .vision: return cVision
         case .pro: return cPro
         case .other: return cOther
         }
@@ -554,6 +601,7 @@ final class CardView: BaseView {
     var title: String {
         switch kind {
         case .flash: return "V4 Flash"
+        case .vision: return "V4 Vision Exp"
         case .pro: return "V4 Pro"
         case .other: return "其他模型"
         }
@@ -562,6 +610,7 @@ final class CardView: BaseView {
     var priceRef: PriceRef? {
         switch kind {
         case .flash: return flashRef
+        case .vision: return nil
         case .pro: return proRef
         case .other: return nil
         }
@@ -723,12 +772,12 @@ final class FooterView: BaseView {
         case .loading, .ok:
             if let r = report {
                 let cur = r.flash.primaryCurrency
-                let totalCost = r.flash.primaryCost + r.pro.primaryCost + r.other.primaryCost
+                let totalCost = r.totalCost
                 let cost = totalCost > 0
                     ? "\(currencySymbol(cur))\(fmtCost(totalCost))"
                     : "¥0.00"
-                let allHit = r.flash.hit + r.pro.hit + r.other.hit
-                let allMiss = r.flash.miss + r.pro.miss + r.other.miss
+                let allHit = r.flash.hit + r.vision.hit + r.pro.hit + r.other.hit
+                let allMiss = r.flash.miss + r.vision.miss + r.pro.miss + r.other.miss
                 let hit = allHit + allMiss > 0
                     ? String(format: "%.1f%%", Double(allHit) / Double(allHit + allMiss) * 100)
                     : "—"
@@ -934,6 +983,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let rootView: BaseView
     private let header = HeaderView()
     private let flashCard = CardView()
+    private let visionCard = CardView()
     private let proCard = CardView()
     private let otherCard = CardView()
     private let keyList = KeyListView()
@@ -943,6 +993,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var report: DayReport?
     private var status: WidgetStatus = .noToken
     private var autoImported = false
+    private var refreshGeneration = 0
+    private var retryWorkItem: DispatchWorkItem?
+    private static let retryDelays: [TimeInterval] = [2, 5]
 
     var token: String? {
         if let saved = UserDefaults.standard.string(forKey: Self.tokenKey), !saved.isEmpty {
@@ -1030,6 +1083,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         flashCard.kind = .flash
         flashCard.toolTip = flashRef.tooltip
         flashCard.onRightClick = { [weak self] e in self?.showMenu(e) }
+        visionCard.kind = .vision
+        visionCard.onRightClick = { [weak self] e in self?.showMenu(e) }
         proCard.kind = .pro
         proCard.toolTip = proRef.tooltip
         proCard.onRightClick = { [weak self] e in self?.showMenu(e) }
@@ -1041,6 +1096,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         rootView.addSubview(header)
         rootView.addSubview(flashCard)
+        rootView.addSubview(visionCard)
         rootView.addSubview(proCard)
         rootView.addSubview(otherCard)
         rootView.addSubview(keyList)
@@ -1079,19 +1135,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func refresh() {
+        retryWorkItem?.cancel()
+        retryWorkItem = nil
+        refreshGeneration &+= 1
+        let generation = refreshGeneration
+
         guard let token else {
             if !autoImported {
                 autoImported = true
                 DispatchQueue.global().async { [weak self] in
                     if let t = chromeToken() {
                         DispatchQueue.main.async {
+                            guard let self, generation == self.refreshGeneration else { return }
                             UserDefaults.standard.set(t, forKey: Self.tokenKey)
-                            self?.refresh()
+                            self.refresh()
                         }
                     } else {
                         DispatchQueue.main.async {
-                            self?.status = .noToken
-                            self?.render()
+                            guard let self, generation == self.refreshGeneration else { return }
+                            self.status = .noToken
+                            self.render()
                         }
                     }
                 }
@@ -1103,12 +1166,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         status = .loading
         render()
+        performRefresh(token: token, generation: generation, attempt: 0)
+    }
+
+    private func performRefresh(token: String, generation: Int, attempt: Int) {
         DeepSeekFetcher(token: token).fetchToday { [weak self] res in
             DispatchQueue.main.async {
-                guard let self else { return }
+                guard let self, generation == self.refreshGeneration else { return }
                 switch res {
-                case .success(let r):
-                    self.report = r
+                case .success(var nextReport):
+                    if self.isTransientEmptyReport(nextReport) {
+                        self.handleRefreshFailure(
+                            .api("平台暂时返回空用量，已保留上次数据"),
+                            token: token, generation: generation, attempt: attempt)
+                        return
+                    }
+                    if nextReport.balance == nil, let previous = self.report {
+                        nextReport.balance = previous.balance
+                        nextReport.balanceCurrency = previous.balanceCurrency
+                    }
+                    self.retryWorkItem = nil
+                    self.report = nextReport
                     self.status = .ok
                     self.header.updatedAt = Date()
                     // 若 token 来自环境变量，成功后持久化到本机偏好
@@ -1116,11 +1194,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         UserDefaults.standard.set(token, forKey: Self.tokenKey)
                     }
                 case .failure(let e):
-                    self.status = .error(e.localizedDescription)
+                    self.handleRefreshFailure(
+                        e, token: token, generation: generation, attempt: attempt)
+                    return
                 }
                 self.render()
             }
         }
+    }
+
+    private func isTransientEmptyReport(_ next: DayReport) -> Bool {
+        guard let previous = report,
+              let updatedAt = header.updatedAt,
+              Calendar.current.isDate(updatedAt, inSameDayAs: Date()) else { return false }
+        return (previous.totalTokens > 0 && next.totalTokens == 0)
+            || (previous.totalCost > 0 && next.totalCost == 0)
+    }
+
+    private func handleRefreshFailure(_ error: FetchError, token: String,
+                                      generation: Int, attempt: Int) {
+        guard generation == refreshGeneration else { return }
+        if error.isRetryable && attempt < Self.retryDelays.count {
+            let delay = Self.retryDelays[attempt]
+            status = .loading
+            render()
+            let work = DispatchWorkItem { [weak self] in
+                guard let self, generation == self.refreshGeneration else { return }
+                self.retryWorkItem = nil
+                self.performRefresh(token: token, generation: generation, attempt: attempt + 1)
+            }
+            retryWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+            return
+        }
+        retryWorkItem = nil
+        status = .error(error.localizedDescription)
+        render()
     }
 
     private func render() {
@@ -1128,9 +1237,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         header.needsDisplay = true
 
         flashCard.agg = report?.flash
+        visionCard.agg = report?.vision
         proCard.agg = report?.pro
         otherCard.agg = report?.other
         flashCard.needsDisplay = true
+        visionCard.needsDisplay = true
         proCard.needsDisplay = true
         otherCard.needsDisplay = true
 
@@ -1159,8 +1270,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let headerGap: CGFloat = 4
         let cardH: CGFloat = 82
         let footerH: CGFloat = 36
-        let showOther = (report?.other.tokens ?? 0) > 0
-        let n = showOther ? 3 : 2
+        let showVision = (report?.vision.tokens ?? 0) > 0 || (report?.vision.primaryCost ?? 0) > 0
+        let showOther = (report?.other.tokens ?? 0) > 0 || (report?.other.primaryCost ?? 0) > 0
+        var cards = [flashCard]
+        if showVision { cards.append(visionCard) }
+        cards.append(proCard)
+        if showOther { cards.append(otherCard) }
+        let n = cards.count
         let keys = report?.keys ?? []
         let showKeySection = showKeys && !keys.isEmpty
         let keyH = showKeySection ? KeyListView.height(for: keys.count) : 0
@@ -1170,16 +1286,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             resizeWindow(toHeight: needed)
         }
         var y = needed - headerH - headerGap
-        flashCard.frame = NSRect(x: 8, y: y - cardH, width: cardW, height: cardH)
-        y -= cardH + 8
-        proCard.frame = NSRect(x: 8, y: y - cardH, width: cardW, height: cardH)
-        y -= cardH + 8
-        if showOther {
-            otherCard.frame = NSRect(x: 8, y: y - cardH, width: cardW, height: cardH)
-            otherCard.isHidden = false
-        } else {
-            otherCard.isHidden = true
+        for card in cards {
+            card.frame = NSRect(x: 8, y: y - cardH, width: cardW, height: cardH)
+            card.isHidden = false
+            y -= cardH + 8
         }
+        visionCard.isHidden = !showVision
+        otherCard.isHidden = !showOther
         header.frame = NSRect(x: 0, y: needed - headerH, width: w, height: headerH)
         if showKeySection {
             keyList.frame = NSRect(x: 0, y: footerH + 8, width: w, height: keyH)
@@ -1277,9 +1390,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func menuAbout() {
         let alert = NSAlert()
-        alert.messageText = "DeepSeek 浮窗 v2.0.1"
+        alert.messageText = "DeepSeek 浮窗 v2.1.0"
         alert.informativeText = """
-        展示当天 V4-Flash / V4-Pro 每百万 token 平均费用与缓存命中率。
+        展示当天 V4-Flash / V4-Flash-Vision-Exp / V4-Pro 每百万 token 平均费用与缓存命中率。
         数据来源：platform.deepseek.com 平台用量接口（userToken）。
         峰谷参考（元/百万 tokens，北京时间 9-12 / 14-18 为峰时）：
         Flash 峰 0.10/3.0/9.0 · 闲 0.05/1.5/4.5
@@ -1297,6 +1410,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var r = DayReport()
         r.flash.add(hit: 40_000_000, miss: 609_137, out: 8_170_863, req: 195)
         r.flash.addCost(9.79, currency: "CNY")
+        r.vision.add(hit: 90_000, miss: 5_000, out: 25_000, req: 2)
+        r.vision.addCost(0.04, currency: "CNY")
         r.pro.add(hit: 60_000_000, miss: 301_508, out: 14_958_492, req: 233)
         r.pro.addCost(30.24, currency: "CNY")
 
@@ -1340,6 +1455,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         print("DEBUG header=\(header.frame) flash=\(flashCard.frame) pro=\(proCard.frame) footer=\(footer.frame)")
         if let r = report {
             print("DEBUG flash toks=\(r.flash.tokens) hit=\(r.flash.hit) miss=\(r.flash.miss) out=\(r.flash.out) rate=\(r.flash.hitRate ?? -1) cost=\(r.flash.primaryCost)")
+            print("DEBUG vision toks=\(r.vision.tokens) hit=\(r.vision.hit) miss=\(r.vision.miss) out=\(r.vision.out) rate=\(r.vision.hitRate ?? -1) cost=\(r.vision.primaryCost)")
             print("DEBUG pro   toks=\(r.pro.tokens) hit=\(r.pro.hit) miss=\(r.pro.miss) out=\(r.pro.out) rate=\(r.pro.hitRate ?? -1) cost=\(r.pro.primaryCost)")
         } else {
             print("DEBUG report=nil status=\(status)")
@@ -1395,6 +1511,7 @@ func selftestJSON(_ r: DayReport) -> String {
     }
     let dict: [String: Any] = [
         "flash": aggDict(r.flash),
+        "vision": aggDict(r.vision),
         "pro": aggDict(r.pro),
         "other": aggDict(r.other),
         "balance": r.balance as Any,
